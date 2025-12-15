@@ -93,10 +93,10 @@ async function run() {
         res.send(result)
     })
 
-    app.get('/manager/products/:email',async(req,res)=>{
-      const email=req.params.email;
-      const query={managerEmail:email};
-      const result=await productCollection.find(query).toArray();
+    app.get('/my-donation-requests',verifyFBToken,async(req,res)=>{
+      const email=req.decoded_email;
+      const query={req_email:email};
+      const result=await requestsCollection.find(query).toArray();
       res.send(result)
     })
     // Send a ping to confirm a successful connection
