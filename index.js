@@ -110,6 +110,34 @@ async function run() {
 
       res.send({request:result,totalRequest})
     })
+
+    // profile updated 
+    app.patch("/users/profile", verifyFBToken, async (req, res) => {
+      const email = req.decoded_email; 
+      const { name, district, upazila, blood, mainPhotoUrl } = req.body;
+
+      const query = { email };
+      const updateDoc = {
+        $set: {
+          name,
+          district,
+          upazila,
+          blood,
+          mainPhotoUrl,
+          updatedAt: new Date(),
+        },
+      };
+
+      const result = await usercollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+    app.get("/users/profile", verifyFBToken, async (req, res) => {
+      const email = req.decoded_email;
+      const result = await usercollection.findOne({ email });
+      res.send(result);
+    });
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
