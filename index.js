@@ -3,6 +3,11 @@ const express = require("express");
 const cors=require('cors');
 require('dotenv').config()
 const port=process.env.PORT||3000
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
+const crypto=require('crypto')
+
+
+
 const app=express()
 const uri = process.env.URI;
 app.use(cors());
@@ -137,8 +142,36 @@ async function run() {
       res.send(result);
     });
 
-
-    // Send a ping to confirm a successful connection
+  // payment 
+  app.post('/create-payment-checkout',async(req,res)=>{
+    const information=req.body;
+    // console.log(information);
+    const amount=parseInt(information.donateAmount)*100;
+    const session=await stripe.checkout.sessions.create({
+      line_items:[
+        {
+          price_data:{
+            currency:'usd',
+            unit_amount:amount,
+            product_data:{
+              name:'please Donate'
+            }
+          },
+          quantity:1,
+        },
+      ],
+      mode:'payment',
+      metadata:{
+        donorName:information?.donorName
+      },
+      customer_email:information.donorEmail,
+      success_url:`${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:`${process.env.SITE_DOMAIN}/payment-cancelled`,
+    });
+    res.send({url:session.url })
+    
+  })
+      // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
