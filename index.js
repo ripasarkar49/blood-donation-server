@@ -219,58 +219,73 @@ const fixed=blood.replace(/ /g,"+").trim();
     if (upazila) {
       query.req_upazila=upazila;
     }
-    console.log(query);
+    // console.log(query);
     const result = await requestsCollection.find(query).toArray();
     res.send(result);
     
   })
   // get single donation request by id
-app.get("/donation/:id", verifyFBToken, async (req, res) => {
-  const { id } = req.params;
+    app.get("/donation/:id", verifyFBToken, async (req, res) => {
+      const { id } = req.params;
 
-  try {
-    const result = await requestsCollection.findOne({
-      _id: new ObjectId(id),
+      try {
+        const result = await requestsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!result) {
+          return res.status(404).send({ message: "Donation not found" });
+        }
+
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Invalid donation id" });
+      }
     });
 
-    if (!result) {
-      return res.status(404).send({ message: "Donation not found" });
-    }
 
-    res.send(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Invalid donation id" });
-  }
-});
+ 
 
+    // Update donation status (private)
+    app.patch("/update-donation-status", verifyFBToken, async (req, res) => {
+      const { id, status } = req.query;
 
-  const { ObjectId } = require("mongodb");
-
-// Update donation status (private)
-app.patch("/update-donation-status", verifyFBToken, async (req, res) => {
-  const { id, status } = req.query;
-
-  if (!id || !status) {
-    return res.status(400).send({ message: "Missing id or status" });
-  }
-
-  try {
-    const result = await requestsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          donation_status: status,
-        },
+      if (!id || !status) {
+        return res.status(400).send({ message: "Missing id or status" });
       }
-    );
 
-    res.send(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Server error" });
-  }
-});
+      try {
+        const result = await requestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              donation_status: status,
+            },
+          }
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
+
+    //  donation requests status pending filter
+    app.get("/pending-requests", async (req, res) => {
+      try {
+      
+        const result = await requestsCollection
+          .find({ donation_status: "pending" })
+          .toArray();
+
+        res.status(200).send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server error fetching requests" });
+      }
+    });
 
       // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
