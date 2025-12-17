@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion,ObjectId } = require('mongodb');
 const express = require("express");
 const cors=require('cors');
 require('dotenv').config()
@@ -224,6 +224,54 @@ const fixed=blood.replace(/ /g,"+").trim();
     res.send(result);
     
   })
+  // get single donation request by id
+app.get("/donation/:id", verifyFBToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await requestsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!result) {
+      return res.status(404).send({ message: "Donation not found" });
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Invalid donation id" });
+  }
+});
+
+
+  const { ObjectId } = require("mongodb");
+
+// Update donation status (private)
+app.patch("/update-donation-status", verifyFBToken, async (req, res) => {
+  const { id, status } = req.query;
+
+  if (!id || !status) {
+    return res.status(400).send({ message: "Missing id or status" });
+  }
+
+  try {
+    const result = await requestsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          donation_status: status,
+        },
+      }
+    );
+
+    res.send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Server error" });
+  }
+});
+
       // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
