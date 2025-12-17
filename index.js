@@ -58,6 +58,7 @@ async function run() {
     const database=client.db('paymentDB')
     const usercollection=database.collection('user')
     const requestsCollection=database.collection('requests')
+    const paymentsCollection=database.collection('payments')
     app.post('/users',async(req,res)=>{
         const userInfo=req.body;
         userInfo.role="donar";
@@ -169,6 +170,58 @@ async function run() {
       cancel_url:`${process.env.SITE_DOMAIN}/payment-cancelled`,
     });
     res.send({url:session.url })
+    
+  })
+
+  app.post('/success-payment',async(req,res)=>{
+    const {session_id}=req.query;
+    const session=await stripe.checkout.sessions.retrieve(
+     session_id
+    )
+    const transactionId=session.payment_intent;
+    const isPaymentExist=await paymentsCollection.findOne({transactionId})
+    if(isPaymentExist){
+      console.log("helooooo");
+      return res.status(400).send('Already Exist')
+      
+    }
+    console.log('after verify');
+
+    if (session.payment_status=='paid') {
+      const paymentInfo={
+        amount:session.amount_total/100,
+        currency:session.currency,
+        donorEmail:session.customer_email,
+        transactionId,
+        payment_status:session.payment_status,
+        paidAt:new Date()
+      }
+      const result=await paymentsCollection.insertOne(paymentInfo)
+      return res.send(result)
+    }
+    
+  })
+
+  app.get('/search-requests',async(req,res)=>{
+    const {blood,district,upazila}=req.query;
+    // console.log(req.query);
+    const query={};
+    if (!query) {
+      return
+    }
+    if (blood) {
+const fixed=blood.replace(/ /g,"+").trim();
+      query.blood=fixed;  
+    }
+    if (district) {
+      query.req_district=district;
+    }
+    if (upazila) {
+      query.req_upazila=upazila;
+    }
+    console.log(query);
+    const result = await requestsCollection.find(query).toArray();
+    res.send(result);
     
   })
       // Send a ping to confirm a successful connection
