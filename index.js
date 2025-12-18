@@ -138,7 +138,46 @@ async function run() {
 
       res.send({request:result,totalRequest})
     })
+    app.patch("/accept-donation/:id", verifyFBToken, async (req, res) => {
+      const id = req.params.id;
+      const email = req.decoded_email;
+      const donor = await usercollection.findOne({ email });
+      const result = await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            donation_status: "inprogress",
+            donorName: donor.name,
+            donorEmail: donor.email,
+          },
+        }
+      );
 
+      res.send(result);
+    });
+
+    app.delete("/delete/:id", verifyFBToken, async (req, res) => {
+      const id = req.params.id;
+
+      const donation = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (donation.donation_status !== "pending") {
+        return res
+          .status(403)
+          .send({ message: "Cannot delete after inprogress" });
+      }
+
+      const result = await requestsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
+
+
+    
     // profile updated 
     app.patch("/users/profile", verifyFBToken, async (req, res) => {
       const email = req.decoded_email; 
