@@ -67,11 +67,25 @@ async function run() {
         const result=await usercollection.insertOne(userInfo);
         res.send(result)
     })
-    app.get('/users',verifyFBToken,async(req,res)=>{
-      const result=await usercollection.find().toArray()
-      res.status(200).send(result)
+    // GET /users?status=active|Blocked|all
+    app.get('/users', verifyFBToken, async (req, res) => {
+      try {
+        const { status } = req.query;
+        const query = {};
 
-    })
+        if (status && status.toLowerCase() !== "all") {
+          // Match status exactly (active or Blocked)
+          query.status = status.toLowerCase() === "active" ? "active" : "Blocked";
+        }
+
+        const users = await usercollection.find(query).toArray();
+        res.status(200).send(users);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Server error fetching users" });
+      }
+    });
+
     app.get('/users/role/:email',async(req,res)=>{
         const {email}=req.params
         const query={email:email}
