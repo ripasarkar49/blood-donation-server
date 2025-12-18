@@ -379,6 +379,27 @@ const fixed=blood.replace(/ /g,"+").trim();
       }
     });
 
+
+    app.get("/admin-stats", verifyFBToken, async (req, res) => {
+      const totalUsers = await usercollection.countDocuments({
+        role: "donar",
+      });
+
+      const totalRequests = await requestsCollection.countDocuments();
+
+      const payments = await paymentsCollection.find().toArray();
+      const totalFunding = payments.reduce(
+        (sum, pay) => sum + pay.amount,
+        0
+      );
+
+      res.send({
+        totalUsers,
+        totalRequests,
+        totalFunding,
+      });
+    });
+
       // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
