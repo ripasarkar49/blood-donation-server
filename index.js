@@ -379,7 +379,7 @@ const fixed=blood.replace(/ /g,"+").trim();
       }
     });
 
-
+// admin 
     app.get("/admin-stats", verifyFBToken, async (req, res) => {
       const totalUsers = await usercollection.countDocuments({
         role: "donar",
@@ -399,6 +399,30 @@ const fixed=blood.replace(/ /g,"+").trim();
         totalFunding,
       });
     });
+
+    // GET /all-donation-requests
+  app.get('/all-donation-requests', verifyFBToken, async (req, res) => {
+  try {
+    const { status, page = 0, size = 10 } = req.query;
+
+    const query = {};
+    if (status) query.donation_status = status;
+
+    const requests = await requestsCollection
+      .find(query)
+      .limit(Number(size))
+      .skip(Number(size) * Number(page))
+      .toArray();
+
+    const totalRequest = await requestsCollection.countDocuments(query);
+
+    res.send({ request: requests, totalRequest });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Server error fetching all donation requests" });
+      }
+    });
+
 
       // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
