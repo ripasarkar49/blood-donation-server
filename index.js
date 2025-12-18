@@ -92,20 +92,42 @@ async function run() {
         res.send(result)
     })
 
-    app.post('/requests',verifyFBToken, async(req,res)=>{
-        const data=req.body;
-        data.createdAt=new Date();
-        const result=await requestsCollection.insertOne(data);
-        res.send(result)
-    })
+        app.post('/requests', verifyFBToken, async (req, res) => {
+        try {
+        const email = req.decoded_email;
+
+        const user = await usercollection.findOne({ email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        if (user.status !== "active") {
+          return res.status(403).send({
+            message: "Blocked users cannot create donation requests",
+          });
+        }
+
+        const data = req.body;
+        data.createdAt = new Date();
+        data.req_email = email; 
+
+        const result = await requestsCollection.insertOne(data);
+        res.send(result);
+
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
 
     app.get('/my-donation-requests',verifyFBToken,async(req,res)=>{
       const email=req.decoded_email;
       const size=Number(req.query.size)
       const page=Number(req.query.page)
-
+      const { status } = req.query;
       const query={req_email:email};
-
+      if (status) query.donation_status = status;
       const result=await requestsCollection
       .find(query)
       .limit(size)
