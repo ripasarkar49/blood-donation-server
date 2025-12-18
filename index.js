@@ -305,6 +305,37 @@ const fixed=blood.replace(/ /g,"+").trim();
       }
     });
 
+    // upadte donation request 
+      app.patch("/update-donation/:id", verifyFBToken, async (req, res) => {
+      const id = req.params.id;
+
+      const donation = await requestsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (donation.donation_status !== "pending") {
+        return res
+          .status(403)
+          .send({ message: "Only pending request can be updated" });
+      }
+
+      const result = await requestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            Recipient_Name: req.body.Recipient_Name,
+            full_address: req.body.full_address,
+            req_district: req.body.req_district,
+            req_upazila: req.body.req_upazila,
+            hospital_name: req.body.hospital_name,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      res.send(result);
+    });
+
 
  
 
