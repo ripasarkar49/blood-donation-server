@@ -174,22 +174,47 @@ async function run() {
       res.send({request:result,totalRequest})
     })
     app.patch("/accept-donation/:id", verifyFBToken, async (req, res) => {
-      const id = req.params.id;
-      const email = req.decoded_email;
-      const donor = await usercollection.findOne({ email });
-      const result = await requestsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        {
-          $set: {
-            donation_status: "inprogress",
-            donorName: donor.name,
-            donorEmail: donor.email,
-          },
-        }
-      );
+      try {
+        const id = req.params.id;
+        const email = req.decoded_email;
 
-      res.send(result);
+        // Get donor user
+        const donor = await usercollection.findOne({ email });
+        if (!donor) return res.status(404).send({ message: "User not found" });
+
+        // Get donation request
+        const donation = await requestsCollection.findOne({ _id: new ObjectId(id) });
+        if (!donation) return res.status(404).send({ message: "Donation not found" });
+
+        // Only allow pending donations
+        if (donation.donation_status !== "pending") {
+          return res.status(403).send({ message: "Donation is not pending" });
+        }
+
+        // Donor cannot donate their own request
+        if (donation.req_email === email) {
+          return res.status(403).send({ message: "Cannot donate your own request" });
+        }
+
+        // Update donation status to inprogress and save donor info
+        const result = await requestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              donation_status: "inprogress",
+              donorName: donor.name,
+              donorEmail: donor.email,
+            },
+          }
+        );
+
+        res.send({ message: "Donation marked as inprogress", result });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server error confirming donation" });
+      }
     });
+
 
     app.delete("/delete/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
@@ -269,34 +294,50 @@ async function run() {
     
   })
 
-  app.post('/success-payment',async(req,res)=>{
-    const {session_id}=req.query;
-    const session=await stripe.checkout.sessions.retrieve(
-     session_id
-    )
-    const transactionId=session.payment_intent;
-    const isPaymentExist=await paymentsCollection.findOne({transactionId})
-    if(isPaymentExist){
-      console.log("helooooo");
-      return res.status(400).send('Already Exist')
-      
-    }
-    console.log('after verify');
-
-    if (session.payment_status=='paid') {
-      const paymentInfo={
-        amount:session.amount_total/100,
-        currency:session.currency,
-        donorEmail:session.customer_email,
-        transactionId,
-        payment_status:session.payment_status,
-        paidAt:new Date()
-      }
-      const result=await paymentsCollection.insertOne(paymentInfo)
-      return res.send(result)
-    }
+  app.post('/success-payment', async (req, res) => {
+  try {
+    const { session_id } = req.query;
     
-  })
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+
+    const transactionId = session.payment_intent;
+
+    const isPaymentExist = await paymentsCollection.findOne({ transactionId });
+    if (isPaymentExist) {
+      return res.status(400).send({ message: 'Payment already processed' });
+    }
+
+    if (session.payment_status === 'paid') {
+      const paymentInfo = {
+        amount: session.amount_total / 100,
+        currency: session.currency,
+        donorEmail: session.customer_email,
+        donorName: session.metadata?.donorName || "Anonymous Donor", 
+        transactionId,
+        payment_status: session.payment_status,
+        paidAt: new Date()
+      };
+
+      const result = await paymentsCollection.insertOne(paymentInfo);
+      res.send(result);
+    } else {
+      res.status(400).send({ message: 'Payment not paid' });
+    }
+  } catch (error) {
+    console.error("Error saving payment:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
+  // GET all payments data for the table
+  app.get('/payments', async (req, res) => {
+    try {
+      const result = await paymentsCollection.find().sort({ paidAt: -1 }).toArray();
+      res.send(result);
+    } catch (error) {
+      res.status(500).send({ message: "Error fetching payments" });
+    }
+  });
 
   app.get('/search-requests',async(req,res)=>{
     const {blood,district,upazila}=req.query;
@@ -389,9 +430,9 @@ const fixed=blood.replace(/ /g,"+").trim();
         });
         if (!donation) return res.status(404).send({ message: "Donation not found" });
 
-        // ===== Role-based status update =====
+        //  Role-based status update 
         if (user.role === "donar") {
-          // Donor cannot update any status
+          
           return res
             .status(403)
             .send({ message: "Donors cannot update donation status" });
@@ -437,25 +478,29 @@ const fixed=blood.replace(/ /g,"+").trim();
       }
     });
 
-// admin 
+      // admin-stats 
     app.get("/admin-stats", verifyFBToken, async (req, res) => {
-      const totalUsers = await usercollection.countDocuments({
-        role: "donar",
-      });
+      try {
+        const totalUsers = await usercollection.countDocuments({}); 
 
-      const totalRequests = await requestsCollection.countDocuments();
+        const totalRequests = await requestsCollection.countDocuments({});
 
-      const payments = await paymentsCollection.find().toArray();
-      const totalFunding = payments.reduce(
-        (sum, pay) => sum + pay.amount,
-        0
-      );
+        const payments = await paymentsCollection.find().toArray();
+      
+        const totalFunding = payments.reduce(
+          (sum, pay) => sum + (pay.amount || 0),
+          0
+        );
 
-      res.send({
-        totalUsers,
-        totalRequests,
-        totalFunding,
-      });
+        res.send({
+          totalUsers,
+          totalRequests,
+          totalFunding,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Error fetching stats" });
+      }
     });
 
     // GET all blood donation requests (admin + volunteer)
