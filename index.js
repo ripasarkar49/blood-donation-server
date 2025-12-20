@@ -61,7 +61,7 @@ async function run() {
     const paymentsCollection=database.collection('payments')
     app.post('/users',async(req,res)=>{
         const userInfo=req.body;
-        userInfo.role="donar";
+        userInfo.role=userInfo?.role || "donar";
         userInfo.status="active";
         userInfo.createdAt=new Date();
         const result=await usercollection.insertOne(userInfo);
@@ -85,6 +85,27 @@ async function run() {
         res.status(500).send({ message: "Server error fetching users" });
       }
     });
+    // PATCH /update/user/role?email=someone@gmail.com&role=volunteer/admin
+      app.patch("/update/user/role", verifyFBToken, async (req, res) => {
+        try {
+          const { email, role } = req.query;
+          if (!email || !role) return res.status(400).send({ message: "Missing email or role" });
+
+          const allowedRoles = ["donar", "volunteer", "admin"];
+          if (!allowedRoles.includes(role)) return res.status(400).send({ message: "Invalid role" });
+
+          const result = await usercollection.updateOne(
+            { email },
+            { $set: { role } }
+          );
+
+          res.send(result);
+        } catch (error) {
+          console.error(error);
+          res.status(500).send({ message: "Server error updating role" });
+        }
+      });
+
 
     app.get('/users/role/:email',async(req,res)=>{
         const {email}=req.params
@@ -351,32 +372,55 @@ const fixed=blood.replace(/ /g,"+").trim();
     });
 
 
- 
-
-    // Update donation status (private)
+ // PATCH /update-donation-status?id=123&status=inprogress
     app.patch("/update-donation-status", verifyFBToken, async (req, res) => {
-      const { id, status } = req.query;
-
-      if (!id || !status) {
-        return res.status(400).send({ message: "Missing id or status" });
-      }
-
       try {
+        const { id, status } = req.query;
+        if (!id || !status)
+          return res.status(400).send({ message: "Missing id or status" });
+
+        const email = req.decoded_email;
+        const user = await usercollection.findOne({ email });
+
+        if (!user) return res.status(404).send({ message: "User not found" });
+
+        const donation = await requestsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        if (!donation) return res.status(404).send({ message: "Donation not found" });
+
+        // ===== Role-based status update =====
+        if (user.role === "donar") {
+          // Donor cannot update any status
+          return res
+            .status(403)
+            .send({ message: "Donors cannot update donation status" });
+        }
+
+        // Volunteer can only update to specific statuses
+        if (
+          user.role === "volunteer" &&
+          !["inprogress", "done", "canceled"].includes(status)
+        ) {
+          return res
+            .status(403)
+            .send({ message: "Volunteers can only update donation status" });
+        }
+
+        // Admin can update any status
+
         const result = await requestsCollection.updateOne(
           { _id: new ObjectId(id) },
-          {
-            $set: {
-              donation_status: status,
-            },
-          }
+          { $set: { donation_status: status } }
         );
 
         res.send(result);
       } catch (error) {
         console.error(error);
-        res.status(500).send({ message: "Server error" });
+        res.status(500).send({ message: "Server error updating donation status" });
       }
     });
+
 
     //  donation requests status pending filter
     app.get("/pending-requests", async (req, res) => {
@@ -414,30 +458,33 @@ const fixed=blood.replace(/ /g,"+").trim();
       });
     });
 
-    // GET /all-donation-requests
-  app.get('/all-donation-requests', verifyFBToken, async (req, res) => {
-  try {
-    const { status, page = 0, size = 10 } = req.query;
+    // GET all blood donation requests (admin + volunteer)
+    app.get("/all-blood-donation-requests", verifyFBToken, async (req, res) => {
+      try {
+        const { page = 0, size = 10, status } = req.query;
 
-    const query = {};
-    if (status) query.donation_status = status;
+        const query = {};
+        if (status) {
+          query.donation_status = status;
+        }
 
-    const requests = await requestsCollection
-      .find(query)
-      .limit(Number(size))
-      .skip(Number(size) * Number(page))
-      .toArray();
+        const requests = await requestsCollection
+          .find(query)
+          .skip(Number(page) * Number(size))
+          .limit(Number(size))
+          .toArray();
 
-    const totalRequest = await requestsCollection.countDocuments(query);
+        const totalRequest = await requestsCollection.countDocuments(query);
 
-    res.send({ request: requests, totalRequest });
-      } catch (err) {
-        console.error(err);
-        res.status(500).send({ message: "Server error fetching all donation requests" });
+        res.send({
+          request: requests,
+          totalRequest,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load requests" });
       }
     });
-
-
       // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
