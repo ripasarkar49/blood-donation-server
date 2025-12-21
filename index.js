@@ -501,11 +501,27 @@ const fixed=blood.replace(/ /g,"+").trim();
           (sum, pay) => sum + (pay.amount || 0),
           0
         );
+        const bloodGroupStats = await requestsCollection.aggregate([
+          {
+            $group: {
+              _id: "$blood", 
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              group: "$_id",
+              count: 1,
+              _id: 0
+            }
+          }
+        ]).toArray();
 
         res.send({
           totalUsers,
           totalRequests,
           totalFunding,
+          bloodGroupStats
         });
       } catch (error) {
         console.error(error);
