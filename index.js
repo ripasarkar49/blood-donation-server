@@ -440,38 +440,19 @@ const fixed=blood.replace(/ /g,"+").trim();
     app.patch("/update-donation-status", verifyFBToken, async (req, res) => {
       try {
         const { id, status } = req.query;
-        if (!id || !status)
-          return res.status(400).send({ message: "Missing id or status" });
-
-        const email = req.decoded_email;
+        const email = req.decoded_email; 
         const user = await usercollection.findOne({ email });
-
         if (!user) return res.status(404).send({ message: "User not found" });
 
-        const donation = await requestsCollection.findOne({
-          _id: new ObjectId(id),
-        });
+        const donation = await requestsCollection.findOne({ _id: new ObjectId(id) });
         if (!donation) return res.status(404).send({ message: "Donation not found" });
 
-        //  Role-based status update 
-        if (user.role === "donar") {
-          
-          return res
-            .status(403)
-            .send({ message: "Donors cannot update donation status" });
-        }
+        const isOwner = donation.req_email === email; 
+        const isAdminOrVolunteer = ["admin", "volunteer"].includes(user.role);
 
-        // Volunteer can only update to specific statuses
-        if (
-          user.role === "volunteer" &&
-          !["inprogress", "done", "canceled"].includes(status)
-        ) {
-          return res
-            .status(403)
-            .send({ message: "Volunteers can only update donation status" });
+        if (!isAdminOrVolunteer && !isOwner) {
+          return res.status(403).send({ message: "You don't have permission to update this status" });
         }
-
-        // Admin can update any status
 
         const result = await requestsCollection.updateOne(
           { _id: new ObjectId(id) },
@@ -481,7 +462,7 @@ const fixed=blood.replace(/ /g,"+").trim();
         res.send(result);
       } catch (error) {
         console.error(error);
-        res.status(500).send({ message: "Server error updating donation status" });
+        res.status(500).send({ message: "Server error" });
       }
     });
 
