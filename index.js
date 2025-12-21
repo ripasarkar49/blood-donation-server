@@ -59,6 +59,16 @@ async function run() {
     const usercollection=database.collection('user')
     const requestsCollection=database.collection('requests')
     const paymentsCollection=database.collection('payments')
+    const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded_email;
+  const query = { email: email };
+  const user = await usercollection.findOne(query);
+  const isAdmin = user?.role === 'admin';
+  if (!isAdmin) {
+    return res.status(403).send({ message: "forbidden access! Only admin can see this." });
+  }
+  next();
+};
     app.post('/users',async(req,res)=>{
         const userInfo=req.body;
         userInfo.role=userInfo?.role || "donar";
@@ -68,14 +78,14 @@ async function run() {
         res.send(result)
     })
     // GET /users?status=active|Blocked|all
-    app.get('/users', verifyFBToken, async (req, res) => {
+    app.get('/users', verifyFBToken,verifyAdmin, async (req, res) => {
       try {
         const { status } = req.query;
         const query = {};
 
         if (status && status.toLowerCase() !== "all") {
           // Match status exactly (active or Blocked)
-          query.status = status.toLowerCase() === "active" ? "active" : "Blocked";
+          query.status = status.toLowerCase() === "active" ? "active" : "blocked";
         }
 
         const users = await usercollection.find(query).toArray();
@@ -86,7 +96,7 @@ async function run() {
       }
     });
     // PATCH /update/user/role?email=someone@gmail.com&role=volunteer/admin
-      app.patch("/update/user/role", verifyFBToken, async (req, res) => {
+      app.patch("/update/user/role", verifyFBToken,verifyAdmin, async (req, res) => {
         try {
           const { email, role } = req.query;
           if (!email || !role) return res.status(400).send({ message: "Missing email or role" });
