@@ -181,6 +181,7 @@ async function run() {
       .find(query)
       .limit(size)
       .skip(size*page)
+      .sort({ _id: -1 })
       .toArray();
 
       const totalRequest=await requestsCollection.countDocuments(query);
