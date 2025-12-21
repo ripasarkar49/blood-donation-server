@@ -53,7 +53,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const database=client.db('paymentDB')
     const usercollection=database.collection('user')
@@ -78,23 +78,27 @@ async function run() {
         res.send(result)
     })
     // GET /users?status=active|Blocked|all
-    app.get('/users', verifyFBToken,verifyAdmin, async (req, res) => {
+    app.get('/users', verifyFBToken, verifyAdmin, async (req, res) => {
       try {
-        const { status } = req.query;
+        const { status, page = 0, size = 10 } = req.query; 
         const query = {};
 
         if (status && status.toLowerCase() !== "all") {
-          // Match status exactly (active or Blocked)
           query.status = status.toLowerCase() === "active" ? "active" : "blocked";
         }
 
-        const users = await usercollection.find(query).toArray();
-        res.status(200).send(users);
+        const totalUsers = await usercollection.countDocuments(query);
+        const users = await usercollection.find(query)
+          .skip(parseInt(page) * parseInt(size))
+          .limit(parseInt(size))
+          .toArray();
+
+        res.status(200).send({ users, totalUsers }); 
       } catch (err) {
-        console.error(err);
         res.status(500).send({ message: "Server error fetching users" });
       }
     });
+
     // PATCH /update/user/role?email=someone@gmail.com&role=volunteer/admin
       app.patch("/update/user/role", verifyFBToken,verifyAdmin, async (req, res) => {
         try {
@@ -342,8 +346,17 @@ async function run() {
   // GET all payments data for the table
   app.get('/payments', async (req, res) => {
     try {
-      const result = await paymentsCollection.find().sort({ paidAt: -1 }).toArray();
-      res.send(result);
+      const page = parseInt(req.query.page) || 0;
+      const size = parseInt(req.query.size) || 10;
+
+      const totalCount = await paymentsCollection.countDocuments();
+      const result = await paymentsCollection.find()
+        .sort({ paidAt: -1 })
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+
+      res.send({ payments: result, totalCount }); 
     } catch (error) {
       res.status(500).send({ message: "Error fetching payments" });
     }
@@ -557,8 +570,8 @@ const fixed=blood.replace(/ /g,"+").trim();
       }
     });
       // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
